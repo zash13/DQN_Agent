@@ -12,6 +12,8 @@
 - [A Theoretical Analysis of Deep Q-Learning (arXiv:1901.00137)](https://arxiv.org/abs/1901.00137)
 - [Playing Atari with Deep Reinforcement Learning (arXiv:1312.5602)](https://arxiv.org/abs/1312.5602)
 
+### Experiments and Development
+
 - `DQN_Agent.py`:
 
   - [Originally written within this repository. (DQN Maze)](https://github.com/13biti/DQN_Maze)
