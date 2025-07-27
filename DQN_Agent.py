@@ -261,7 +261,7 @@ class DQNAgent:
                 q_targets[i, actions[i]] = rewards[i] + self.gamma * np.max(q_next[i])
             else:
                 q_targets[i, actions[i]] = rewards[i]
-            q_targets[i, actions[i]] = np.clip(q_targets[i, actions[i]], -10, 10)
+            # q_targets[i, actions[i]] = np.clip(q_targets[i, actions[i]], -10, 10)
 
         self._update_exploration_rate(episode_count=episode)
         loss = self.model.fit(states, q_targets, epochs=1, verbose=0)
@@ -351,7 +351,7 @@ class DoubleDQNAgent(DQNAgent):
                 )
             else:
                 q_targets[i, actions[i]] = rewards[i]
-            q_targets[i, actions[i]] = np.clip(q_targets[i, actions[i]], -10, 10)
+            # q_targets[i, actions[i]] = np.clip(q_targets[i, actions[i]], -10, 10)
 
         # and here is where target network update base on frequency
         if episode % self.target_update_frequency == 0:
