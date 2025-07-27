@@ -354,7 +354,7 @@ class DoubleDQNAgent(DQNAgent):
             q_targets[i, actions[i]] = np.clip(q_targets[i, actions[i]], -10, 10)
 
         # and here is where target network update base on frequency
-        if self.episode_count % self.target_update_frequency == 0:
+        if episode % self.target_update_frequency == 0:
             self._update_target_network()
         self._update_exploration_rate(episode_count=episode)
         loss = self.online_model.fit(states, q_targets, epochs=1, verbose=0)
