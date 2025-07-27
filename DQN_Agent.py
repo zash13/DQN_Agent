@@ -19,6 +19,11 @@ class RewardPolicyType(Enum):
     ERM = 1
 
 
+class UpdateTargetNetworkType(Enum):
+    HARD = 0
+    SOFT = 1
+
+
 INFINITY = float("inf")
 
 
@@ -88,6 +93,13 @@ class QNetwork:
         history = self._model.fit(states, q_targets, epochs=epochs, verbose=verbose)
         return history.history["loss"][0]
 
+    def set_weights(self, weights):
+        self._model.set_weights(weights)
+        return True
+
+    def get_weights(self):
+        return self._model.get_weights()
+
 
 # we learnd that agent should balance between exploration and exploitation
 # without this section , it seems that agent just try to explor new path
@@ -106,7 +118,7 @@ class EpsilonPolicy:
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay
         self.update_per_episod = update_per_episod
-        self.old_episod = 0
+        self.previous_episode = 0
 
     def adjust_epsilon(
         self,
@@ -116,14 +128,14 @@ class EpsilonPolicy:
     ):
         self.epsilon = epsilon
         if self.update_per_episod:
-            if self.old_episod == episode_count:
+            if self.previous_episode == episode_count:
                 return self.epsilon
             else:
-                self.old_episod = episode_count
+                self.previous_episode = episode_count
         if self.policy == EpsilonPolicyType.DECAY:
             return self.linear_decay(episode_count, max_episodes)
         elif self.policy == EpsilonPolicyType.SOFTLINEAR:
-            return self.soft_linear_decayr(episode_count, max_episodes)
+            return self.soft_linear_decay(episode_count, max_episodes)
         else:
             return self.epsilon
 
@@ -133,7 +145,7 @@ class EpsilonPolicy:
         self.epsilon = max(self.epsilon, self.epsilon_min)
         return self.epsilon
 
-    def soft_linear_decayr(self, episode_count, max_episodes=200):
+    def soft_linear_decay(self, episode_count, max_episodes=200):
         if self.epsilon > self.epsilon_min:
             target_epsilon = max(
                 self.epsilon_min,
@@ -265,4 +277,105 @@ class DQNAgent:
             return np.random.choice(self.action_size)
         else:
             q_value = self.model.predict(current_state, verbose=0)[0]
+            return np.argmax(q_value)
+
+
+class DoubleDQNAgent(DQNAgent):
+    def __init__(
+        self,
+        action_size,
+        state_size,
+        learning_rate=0.001,
+        buffer_size=2000,
+        batch_size=32,
+        gamma=0.99,
+        max_episodes=200,
+        epsilon=1.0,
+        epsilon_min=0.01,
+        epsilon_decay=0.995,
+        epsilon_policy: EpsilonPolicy = None,
+        reward_policy: RewardPolicyType = RewardPolicyType.NONE,
+        prefer_lower_heuristic=True,
+        progress_bonus: float = 0.05,
+        exploration_bonus: float = 0.1,
+        update_target_network_method: UpdateTargetNetworkType = UpdateTargetNetworkType.HARD,
+        update_factor=0.005,
+        target_update_frequency=10,
+    ) -> None:
+        super().__init__(
+            action_size,
+            state_size,
+            learning_rate,
+            buffer_size,
+            batch_size,
+            gamma,
+            max_episodes,
+            epsilon,
+            epsilon_min,
+            epsilon_decay,
+            epsilon_policy,
+            reward_policy,
+            prefer_lower_heuristic,
+            progress_bonus,
+            exploration_bonus,
+        )
+        self.update_target_network_method = update_target_network_method
+        self.online_model = self.model
+        self.target_model = QNetwork(state_size, action_size, learning_rate)
+        self.previous_episode = 0
+        self.update_factor = update_factor
+        self.target_model.set_weights(self.online_model.get_weights())
+        self.target_update_frequency = target_update_frequency
+
+    def train(self, episode):
+        data = self.buffer_helper.sample_batch(self.batch_size)
+        if data is None:
+            return None
+        states, next_states, rewards, actions, dones, heuristics = data
+
+        # Here's what I understand is happening:
+        # We have two models: one acts based on Temporal Difference (TD) learning, and the other (called the target network) behaves more like a Monte Carlo method.
+        # Basically, one model is updated frequently (every epoch), while the other is updated less often (at a fixed interval).
+        # The frequently updated model is used for action selection, while the target network is used to evaluate Q-values.
+        # The TD update equation: Q(s, a) = r + γ * (r + max_a' Q(s', a') - Q(s, a)) becomes:
+        # Q_target(s, a) = r + γ * Q_target(s', argmax_a' Q_online(s', a'))
+        q_current = self.online_model.predict(states, verbose=0)
+        q_next_online = self.online_model.predict(next_states, verbose=0)
+        q_next_target = self.target_model.predict(next_states, verbose=0)
+        q_targets = q_current.copy()
+        for i in range(self.batch_size):
+            if not dones[i]:
+                best_action = np.argmax(q_next_online[i])
+                q_targets[i, actions[i]] = (
+                    rewards[i] + self.gamma * q_next_target[i, best_action]
+                )
+            else:
+                q_targets[i, actions[i]] = rewards[i]
+            q_targets[i, actions[i]] = np.clip(q_targets[i, actions[i]], -10, 10)
+
+        # and here is where target network update base on frequency
+        if self.episode_count % self.target_update_frequency == 0:
+            self._update_target_network()
+        self._update_exploration_rate(episode_count=episode)
+        loss = self.online_model.fit(states, q_targets, epochs=1, verbose=0)
+        return loss
+
+    def _update_target_network(self):
+        if self.update_target_network_method == UpdateTargetNetworkType.HARD:
+            self.target_model.set_weights(self.online_model.get_weights())
+        elif self.update_target_network_method == UpdateTargetNetworkType.SOFT:
+            online_weights = self.online_model.get_weights()
+            target_weights = self.target_model.get_weights()
+            updated_weights = []
+            for online_w, target_w in zip(online_weights, target_weights):
+                updated_weights.append(
+                    self.update_factor * online_w + (1 - self.update_factor) * target_w
+                )
+            self.target_model.set_weights(updated_weights)
+
+    def select_action(self, current_state):
+        if np.random.uniform(0, 1) < self.epsilon:
+            return np.random.choice(self.action_size)
+        else:
+            q_value = self.online_model.predict(current_state, verbose=0)[0]
             return np.argmax(q_value)
