@@ -341,6 +341,7 @@ class DoubleDQNAgent(DQNAgent):
         update_target_network_method: UpdateTargetNetworkType = UpdateTargetNetworkType.HARD,
         update_factor=0.005,
         target_update_frequency=10,
+        reward_range=(0, 0),
     ) -> None:
         super().__init__(
             action_size,
@@ -358,6 +359,7 @@ class DoubleDQNAgent(DQNAgent):
             prefer_lower_heuristic,
             progress_bonus,
             exploration_bonus,
+            reward_range,
         )
         self.update_target_network_method = update_target_network_method
         self.online_model = self.model
@@ -462,6 +464,7 @@ class DuelingDQNAgent(DQNAgent):
             prefer_lower_heuristic,
             progress_bonus,
             exploration_bonus,
+            reward_range,
         )
         self._define_model(state_size, action_size, learning_rate)
 
@@ -520,6 +523,7 @@ class DoubleDulelingDQNAgent(DoubleDQNAgent):
         update_target_network_method: UpdateTargetNetworkType = UpdateTargetNetworkType.HARD,
         update_factor=0.005,
         target_update_frequency=10,
+        reward_range=(0, 0),
     ) -> None:
         super().__init__(
             action_size,
@@ -540,6 +544,7 @@ class DoubleDulelingDQNAgent(DoubleDQNAgent):
             update_target_network_method,
             update_factor,
             target_update_frequency,
+            reward_range,
         )
 
     def _define_model(self, state_size, action_size, learning_rate):
