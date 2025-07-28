@@ -112,6 +112,28 @@ class QNetwork:
         return self._model.get_weights()
 
 
+# dueling Q network , basiclly what i am going to do here,  is chaning predict method and mdoel it self to use value and advantage
+# for calculating the Q
+# dueling Q network, basically changing the predict method and model to use value and advantage for calculating Q
+# the only difference sprating streams in the end of network
+class DuelingQNetwork(QNetwork):
+    def __init__(self, state_size, action_size, learning_rate=0.001) -> None:
+        super().__init__(state_size, action_size, learning_rate)
+
+    def _initiate_model(self):
+        inputs = keras.Input(shape=(self.state_size,))
+        x = keras.layers.Dense(64, activation="relu")(inputs)
+        x = keras.layers.Dense(64, activation="relu")(x)
+        value = keras.layers.Dense(1, activation=None)(x)
+        advantages = keras.layers.Dense(self.action_size, activation=None)(x)
+        # combine: Q(s, a) = V(s) + (A(s, a) - mean(A(s, a')))
+        mean_advantages = keras.layers.Lambda(
+            lambda a: a - keras.backend.mean(a, axis=1, keepdims=True)
+        )(advantages)
+        q_values = keras.layers.Add()([value, mean_advantages])
+        return keras.Model(inputs=inputs, outputs=q_values)
+
+
 # we learnd that agent should balance between exploration and exploitation
 # without this section , it seems that agent just try to explor new path
 #
