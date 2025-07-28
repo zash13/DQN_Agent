@@ -1,4 +1,5 @@
 from os import stat
+from matplotlib.pyplot import cla
 import numpy as np
 from tensorflow import keras
 from tensorflow.keras.optimizers import Adam
@@ -33,11 +34,13 @@ class ExperienceBuffer:
         rewarder: "RewardHelper",
         buffer_size=2000,
         prefer_lower_heuristic=True,
+        reward_range=(-10, 20),
     ) -> None:
         self.memory_buffer = deque(maxlen=buffer_size)
         self.buffer_size = buffer_size
         self.reward_helper = rewarder
         self.prefer_lower_heuristic = prefer_lower_heuristic
+        self.reward_range = reward_range
 
     def store_experience(
         self, current_state, next_state, imm_reward, action, done, heuristic=0
@@ -45,6 +48,7 @@ class ExperienceBuffer:
         imm_reward = self.reward_helper.findReward(
             current_state, imm_reward, heuristic, self.prefer_lower_heuristic
         )
+        imm_reward = self.__normalize_reward(self.reward_range, imm_reward)
         self.memory_buffer.append(
             {
                 "current_state": current_state,
@@ -68,6 +72,13 @@ class ExperienceBuffer:
         heuristics = np.array([item["heuristic"] for item in batch])
         return states, next_states, rewards, actions, dones, heuristics
 
+    def __normalize_reward(self, reward_range, reward):
+        min_r, max_r = reward_range
+        if max_r == min_r:
+            return 0.0
+        norm = (reward - min_r) / (max_r - min_r)
+        return norm * 2 - 1
+
 
 class QNetwork:
     def __init__(self, state_size, action_size, learning_rate=0.001) -> None:
@@ -81,7 +92,7 @@ class QNetwork:
             [
                 Input(shape=(self.state_size,)),
                 Dense(units=64, activation="relu"),
-                Dense(units=34, activation="relu"),
+                Dense(units=32, activation="relu"),
                 Dense(units=self.action_size, activation="linear"),
             ]
         )
@@ -227,6 +238,7 @@ class DQNAgent:
         prefer_lower_heuristic=True,
         progress_bonus: float = 0.05,
         exploration_bonus: float = 0.1,
+        reward_range=(0, 0),
     ) -> None:
         self.action_size = action_size
         self.state_size = state_size
@@ -236,7 +248,7 @@ class DQNAgent:
         self.episode_count = 0
         self.max_episodes = max_episodes
 
-        self.model = QNetwork(state_size, action_size, learning_rate)
+        self.model: "QNetwork" = None
         self.epsilon_policy = epsilon_policy or EpsilonPolicy(
             epsilon_min=epsilon_min,
             epsilon_decay=epsilon_decay,
@@ -246,7 +258,12 @@ class DQNAgent:
             RewardHelper(progress_bonus, exploration_bonus, reward_policy),
             buffer_size=buffer_size,
             prefer_lower_heuristic=prefer_lower_heuristic,
+            reward_range=reward_range,
         )
+        self._define_model(state_size, action_size, learning_rate)
+
+    def _define_model(self, state_size, action_size, learning_rate):
+        self.model = QNetwork(state_size, action_size, learning_rate)
 
     def train(self, episode):
         data = self.buffer_helper.sample_batch(self.batch_size)
@@ -321,11 +338,16 @@ class DoubleDQNAgent(DQNAgent):
         )
         self.update_target_network_method = update_target_network_method
         self.online_model = self.model
-        self.target_model = QNetwork(state_size, action_size, learning_rate)
+        self.target_model = None
         self.previous_episode = 0
         self.update_factor = update_factor
         self.target_model.set_weights(self.online_model.get_weights())
         self.target_update_frequency = target_update_frequency
+        self._define_model(state_size, action_size, learning_rate)
+
+    def _define_model(self, state_size, action_size, learning_rate):
+        self.online_model = QNetwork(state_size, action_size, learning_rate)
+        self.target_model = QNetwork(state_size, action_size, learning_rate)
 
     def train(self, episode):
         data = self.buffer_helper.sample_batch(self.batch_size)
