@@ -122,6 +122,7 @@ class DuelingQNetwork(QNetwork):
         super().__init__(state_size, action_size, learning_rate)
 
     def _initiate_model(self):
+        print(self.action_size)
         inputs = keras.Input(shape=(self.state_size,))
         x = keras.layers.Dense(64, activation="relu")(inputs)
         x = keras.layers.Dense(64, activation="relu")(x)
@@ -129,7 +130,8 @@ class DuelingQNetwork(QNetwork):
         advantages = keras.layers.Dense(self.action_size, activation=None)(x)
         # combine: Q(s, a) = V(s) + (A(s, a) - mean(A(s, a')))
         mean_advantages = keras.layers.Lambda(
-            lambda a: a - keras.backend.mean(a, axis=1, keepdims=True)
+            lambda a: a - keras.backend.mean(a, axis=1, keepdims=True),
+            output_shape=(int(self.action_size),),
         )(advantages)
         q_values = keras.layers.Add()([value, mean_advantages])
         return keras.Model(inputs=inputs, outputs=q_values)
@@ -364,11 +366,11 @@ class DoubleDQNAgent(DQNAgent):
         self.update_target_network_method = update_target_network_method
         self.online_model = self.model
         self.target_model = None
+        self._define_model(state_size, action_size, learning_rate)
         self.previous_episode = 0
         self.update_factor = update_factor
         self.target_model.set_weights(self.online_model.get_weights())
         self.target_update_frequency = target_update_frequency
-        self._define_model(state_size, action_size, learning_rate)
 
     def _define_model(self, state_size, action_size, learning_rate):
         self.online_model = QNetwork(state_size, action_size, learning_rate)
