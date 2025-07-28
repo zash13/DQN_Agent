@@ -497,3 +497,76 @@ class DuelingDQNAgent(DQNAgent):
         else:
             q_value = self.model.predict(current_state, verbose=0)[0]
             return np.argmax(q_value)
+
+
+class DoubleDulelingDQNAgent(DoubleDQNAgent):
+    def __init__(
+        self,
+        action_size,
+        state_size,
+        learning_rate=0.001,
+        buffer_size=2000,
+        batch_size=32,
+        gamma=0.99,
+        max_episodes=200,
+        epsilon=1.0,
+        epsilon_min=0.01,
+        epsilon_decay=0.995,
+        epsilon_policy: EpsilonPolicy = None,
+        reward_policy: RewardPolicyType = RewardPolicyType.NONE,
+        prefer_lower_heuristic=True,
+        progress_bonus: float = 0.05,
+        exploration_bonus: float = 0.1,
+        update_target_network_method: UpdateTargetNetworkType = UpdateTargetNetworkType.HARD,
+        update_factor=0.005,
+        target_update_frequency=10,
+    ) -> None:
+        super().__init__(
+            action_size,
+            state_size,
+            learning_rate,
+            buffer_size,
+            batch_size,
+            gamma,
+            max_episodes,
+            epsilon,
+            epsilon_min,
+            epsilon_decay,
+            epsilon_policy,
+            reward_policy,
+            prefer_lower_heuristic,
+            progress_bonus,
+            exploration_bonus,
+            update_target_network_method,
+            update_factor,
+            target_update_frequency,
+        )
+
+    def _define_model(self, state_size, action_size, learning_rate):
+        self.online_model = DuelingQNetwork(state_size, action_size, learning_rate)
+        self.target_model = DuelingQNetwork(state_size, action_size, learning_rate)
+
+    def train(self, episode):
+        self.episode_count += 1
+        data = self.buffer_helper.sample_batch(self.batch_size)
+        if data is None:
+            return None
+        states, next_states, rewards, actions, dones, heuristics = data
+        q_current = self.online_model.predict(states, verbose=0)
+        q_next_online = self.online_model.predict(next_states, verbose=0)
+        q_next_target = self.target_model.predict(next_states, verbose=0)
+        q_targets = q_current.copy()
+        for i in range(self.batch_size):
+            if not dones[i]:
+                best_action = np.argmax(q_next_online[i])
+                q_targets[i, actions[i]] = (
+                    rewards[i] + self.gamma * q_next_target[i, best_action]
+                )
+            else:
+                q_targets[i, actions[i]] = rewards[i]
+
+        self._update_exploration_rate(episode_count=episode)
+        if self.episode_count % self.target_update_frequency == 0:
+            self._update_target_network()
+        loss = self.online_model.fit(states, q_targets, epochs=1, verbose=0)
+        return loss
