@@ -17,6 +17,10 @@
 - [Playing Atari with Deep Reinforcement Learning (arXiv:1312.5602)](https://arxiv.org/abs/1312.5602)
 - [Deep Reinforcement Learning with Double Q-learning (arXiv:1509.06461)](https://arxiv.org/abs/1509.06461)
 
+### Youtube Refferences :
+
+- [ Dueling Deep Q Learning with Tensorflow 2 & Keras | Full Tutorial for Beginners (Dueling QNetwork)](https://www.youtube.com/watch?v=CoePrz751lg&t=1214s)
+
 ### Experiments and Development
 
 - `DQN_Agent.py`:
