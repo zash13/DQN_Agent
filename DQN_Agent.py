@@ -34,13 +34,15 @@ class ExperienceBuffer:
         rewarder: "RewardHelper",
         buffer_size=2000,
         prefer_lower_heuristic=True,
-        reward_range=(-10, 20),
+        reward_range=(0, 100),
+        use_normalization=False,
     ) -> None:
         self.memory_buffer = deque(maxlen=buffer_size)
         self.buffer_size = buffer_size
         self.reward_helper = rewarder
         self.prefer_lower_heuristic = prefer_lower_heuristic
         self.reward_range = reward_range
+        self.use_normalization = use_normalization
 
     def store_experience(
         self, current_state, next_state, imm_reward, action, done, heuristic=0
@@ -48,7 +50,8 @@ class ExperienceBuffer:
         imm_reward = self.reward_helper.findReward(
             current_state, imm_reward, heuristic, self.prefer_lower_heuristic
         )
-        imm_reward = self.__normalize_reward(self.reward_range, imm_reward)
+        if self.use_normalization:
+            imm_reward = self.__normalize_reward(self.reward_range, imm_reward)
         self.memory_buffer.append(
             {
                 "current_state": current_state,
@@ -72,6 +75,10 @@ class ExperienceBuffer:
         heuristics = np.array([item["heuristic"] for item in batch])
         return states, next_states, rewards, actions, dones, heuristics
 
+    # be carefull with nomalization
+    # and reward_range , it may keep you loss close to zero , while your model is learning nothing
+    # in short , cast Qt = r + gamma*Q  , with smaller r , you will have smaller change , and since Q already predicted by model it self,
+    # its like model fit on it own material , so , you will see small loss , with not progress
     def __normalize_reward(self, reward_range, reward):
         min_r, max_r = reward_range
         if max_r == min_r:
