@@ -271,6 +271,7 @@ class DQNAgent:
         progress_bonus: float = 0.05,
         exploration_bonus: float = 0.1,
         reward_range=(0, 0),
+        use_normalization=False,
     ) -> None:
         self.action_size = action_size
         self.state_size = state_size
@@ -291,6 +292,7 @@ class DQNAgent:
             buffer_size=buffer_size,
             prefer_lower_heuristic=prefer_lower_heuristic,
             reward_range=reward_range,
+            use_normalization=use_normalization,
         )
         self._define_model(state_size, action_size, learning_rate)
 
@@ -351,6 +353,7 @@ class DoubleDQNAgent(DQNAgent):
         update_factor=0.005,
         target_update_frequency=10,
         reward_range=(0, 0),
+        use_normalization=False,
     ) -> None:
         super().__init__(
             action_size,
@@ -369,6 +372,7 @@ class DoubleDQNAgent(DQNAgent):
             progress_bonus,
             exploration_bonus,
             reward_range,
+            use_normalization,
         )
         self.update_target_network_method = update_target_network_method
         self.online_model = self.model
@@ -437,81 +441,7 @@ class DoubleDQNAgent(DQNAgent):
             return np.argmax(q_value)
 
 
-class DuelingDQNAgent(DQNAgent):
-    def __init__(
-        self,
-        action_size,
-        state_size,
-        learning_rate=0.001,
-        buffer_size=2000,
-        batch_size=32,
-        gamma=0.99,
-        max_episodes=200,
-        epsilon=1.0,
-        epsilon_min=0.01,
-        epsilon_decay=0.995,
-        epsilon_policy: EpsilonPolicy = None,
-        reward_policy: RewardPolicyType = RewardPolicyType.NONE,
-        prefer_lower_heuristic=True,
-        progress_bonus: float = 0.05,
-        exploration_bonus: float = 0.1,
-        reward_range=(0, 0),
-    ) -> None:
-        super().__init__(
-            action_size,
-            state_size,
-            learning_rate,
-            buffer_size,
-            batch_size,
-            gamma,
-            max_episodes,
-            epsilon,
-            epsilon_min,
-            epsilon_decay,
-            epsilon_policy,
-            reward_policy,
-            prefer_lower_heuristic,
-            progress_bonus,
-            exploration_bonus,
-            reward_range,
-        )
-        self._define_model(state_size, action_size, learning_rate)
-
-    def _define_model(self, state_size, action_size, learning_rate):
-        self.model = DuelingQNetwork(state_size, action_size, learning_rate)
-
-    def train(self, episode):
-        data = self.buffer_helper.sample_batch(self.batch_size)
-        if data is None:
-            return None
-        states, next_states, rewards, actions, dones, heuristics = data
-        q_current = self.model.predict(states, verbose=0)
-        q_next = self.model.predict(next_states, verbose=0)
-        q_targets = q_current.copy()
-        for i in range(self.batch_size):
-            if not dones[i]:
-                q_targets[i, actions[i]] = rewards[i] + self.gamma * np.max(q_next[i])
-            else:
-                q_targets[i, actions[i]] = rewards[i]
-
-        self._update_exploration_rate(episode_count=episode)
-        loss = self.model.fit(states, q_targets, epochs=1, verbose=0)
-        return loss
-
-    def _update_exploration_rate(self, episode_count):
-        self.epsilon = self.epsilon_policy.adjust_epsilon(
-            self.epsilon, episode_count=episode_count, max_episodes=self.max_episodes
-        )
-
-    def select_action(self, current_state):
-        if np.random.uniform(0, 1) < self.epsilon:
-            return np.random.choice(self.action_size)
-        else:
-            q_value = self.model.predict(current_state, verbose=0)[0]
-            return np.argmax(q_value)
-
-
-class DoubleDulelingDQNAgent(DoubleDQNAgent):
+class DuelingDQNAgent(DoubleDQNAgent):
     def __init__(
         self,
         action_size,
@@ -533,6 +463,7 @@ class DoubleDulelingDQNAgent(DoubleDQNAgent):
         update_factor=0.005,
         target_update_frequency=10,
         reward_range=(0, 0),
+        use_normalization=False,
     ) -> None:
         super().__init__(
             action_size,
@@ -554,6 +485,7 @@ class DoubleDulelingDQNAgent(DoubleDQNAgent):
             update_factor,
             target_update_frequency,
             reward_range,
+            use_normalization,
         )
 
     def _define_model(self, state_size, action_size, learning_rate):
