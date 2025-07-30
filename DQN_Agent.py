@@ -88,6 +88,7 @@ class AbstractQNetwork(ABC):
     @abstractmethod
     @abstractmethod
     def predict(self, states: np.ndarray, verbose: int = 0) -> np.ndarray:
+        """predict Q-values for given states."""
         pass
 
     @abstractmethod
@@ -98,14 +99,17 @@ class AbstractQNetwork(ABC):
         epochs: int = 1,
         verbose: int = 0,
     ) -> float:
+        """train the network on states and target Q-values, returning the loss."""
         pass
 
     @abstractmethod
     def set_weights(self, weights: list) -> bool:
+        """set the network's weights."""
         pass
 
     @abstractmethod
     def get_weights(self) -> list:
+        """get the network's weights."""
         pass
 
 
@@ -355,6 +359,8 @@ class RewardHelper:
 
 
 class DQNAgent:
+    """single network Deep Q-learning model"""
+
     def __init__(
         self,
         action_size,
@@ -413,6 +419,7 @@ class DQNAgent:
         )
 
     def train(self, episode):
+        """use to train the model !! yep , so strange"""
         data = self.buffer_helper.sample_batch(self.batch_size)
         if data is None:
             return None
@@ -437,6 +444,7 @@ class DQNAgent:
         )
 
     def select_action(self, current_state):
+        """self an action base on epsilon value , higher epsilon -> more random actions"""
         if np.random.uniform(0, 1) < self.epsilon:
             return np.random.choice(self.action_size)
         else:
@@ -519,6 +527,7 @@ class DoubleDQNAgent(DQNAgent):
         self.target_model.set_weights(self.online_model.get_weights())
 
     def train(self, episode):
+        """no commnet"""
         data = self.buffer_helper.sample_batch(self.batch_size)
         if data is None:
             return None
@@ -565,6 +574,7 @@ class DoubleDQNAgent(DQNAgent):
             self.target_model.set_weights(updated_weights)
 
     def select_action(self, current_state):
+        """self an action base on epsilon value , higher epsilon -> more random actions"""
         if np.random.uniform(0, 1) < self.epsilon:
             return np.random.choice(self.action_size)
         else:
@@ -641,28 +651,3 @@ class DuelingDQNAgent(DoubleDQNAgent):
             learning_rate,
         )
         self.target_model.set_weights(self.online_model.get_weights())
-
-    def train(self, episode):
-        self.episode_count += 1
-        data = self.buffer_helper.sample_batch(self.batch_size)
-        if data is None:
-            return None
-        states, next_states, rewards, actions, dones, heuristics = data
-        q_current = self.online_model.predict(states, verbose=0)
-        q_next_online = self.online_model.predict(next_states, verbose=0)
-        q_next_target = self.target_model.predict(next_states, verbose=0)
-        q_targets = q_current.copy()
-        for i in range(self.batch_size):
-            if not dones[i]:
-                best_action = np.argmax(q_next_online[i])
-                q_targets[i, actions[i]] = (
-                    rewards[i] + self.gamma * q_next_target[i, best_action]
-                )
-            else:
-                q_targets[i, actions[i]] = rewards[i]
-
-        self._update_exploration_rate(episode_count=episode)
-        if self.episode_count % self.target_update_frequency == 0:
-            self._update_target_network()
-        loss = self.online_model.fit(states, q_targets, epochs=1, verbose=0)
-        return loss
