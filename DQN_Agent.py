@@ -1,4 +1,5 @@
 from os import stat
+from types import new_class
 from matplotlib.pyplot import cla
 import numpy as np
 from tensorflow import keras
@@ -374,6 +375,10 @@ class IAgent(ABC):
     def select_action(self, current_state):
         pass
 
+    @abstractmethod
+    def store_experience(self, state, next_state, reward, action, done, huristic):
+        pass
+
 
 class AgentFactory:
     @staticmethod
@@ -556,6 +561,11 @@ class DQNAgent(IAgent):
         else:
             q_value = self.model.predict(current_state, verbose=0)[0]
             return np.argmax(q_value)
+
+    def store_experience(self, state, next_state, reward, action, done, huristic):
+        self.buffer_helper.store_experience(
+            state, next_state, reward, action, done, huristic
+        )
 
 
 class DoubleDQNAgent(DQNAgent):
