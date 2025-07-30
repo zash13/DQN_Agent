@@ -26,6 +26,11 @@ class UpdateTargetNetworkType(Enum):
     SOFT = 1
 
 
+class ModelType(Enum):
+    STANDARD = "standard"
+    DUELING = "dueling"
+
+
 INFINITY = float("inf")
 
 
@@ -102,6 +107,28 @@ class AbstractQNetwork(ABC):
     @abstractmethod
     def get_weights(self) -> list:
         pass
+
+
+class QNetworkFactory:
+    @staticmethod
+    def create_model(
+        model_type: ModelType,
+        state_size: int,
+        action_size: int,
+        fc1_units: int,
+        fc2_units: int,
+        learning_rate: float,
+    ) -> AbstractQNetwork:
+        if model_type == ModelType.STANDARD:
+            return QNetwork(
+                state_size, action_size, fc1_units, fc2_units, learning_rate
+            )
+        elif model_type == ModelType.DUELING:
+            return DuelingQNetwork(
+                state_size, action_size, fc1_units, fc2_units, learning_rate
+            )
+        else:
+            raise ValueError(f"Unknown model type: {model_type}")
 
 
 class QNetwork(AbstractQNetwork):
@@ -358,7 +385,7 @@ class DQNAgent:
         self.episode_count = 0
         self.max_episodes = max_episodes
 
-        self.model: "QNetwork" = None
+        self.model: "AbstractQNetwork"
         self.epsilon_policy = epsilon_policy or EpsilonPolicy(
             epsilon_min=epsilon_min,
             epsilon_decay=epsilon_decay,
@@ -375,9 +402,14 @@ class DQNAgent:
 
     def _define_model(
         self, state_size, action_size, fc1_units, fc2_units, learning_rate
-    ):
-        self.model = QNetwork(
-            state_size, action_size, fc1_units, fc2_units, learning_rate
+    ) -> None:
+        self.model = QNetworkFactory.create_model(
+            ModelType.STANDARD,
+            state_size,
+            action_size,
+            fc1_units,
+            fc2_units,
+            learning_rate,
         )
 
     def train(self, episode):
@@ -458,23 +490,33 @@ class DoubleDQNAgent(DQNAgent):
             use_normalization,
         )
         self.update_target_network_method = update_target_network_method
-        self.online_model = self.model
-        self.target_model = None
+        self.online_model: "AbstractQNetwork" = self.model
+        self.target_model: "AbstractQNetwork"
         self._define_model(state_size, action_size, fc1_units, fc2_units, learning_rate)
         self.previous_episode = 0
         self.update_factor = update_factor
-        self.target_model.set_weights(self.online_model.get_weights())
         self.target_update_frequency = target_update_frequency
 
     def _define_model(
         self, state_size, action_size, fc1_units, fc2_units, learning_rate
     ):
-        self.online_model = QNetwork(
-            state_size, action_size, fc1_units, fc2_units, learning_rate
+        self.online_model = QNetworkFactory.create_model(
+            ModelType.STANDARD,
+            state_size,
+            action_size,
+            fc1_units,
+            fc2_units,
+            learning_rate,
         )
-        self.target_model = QNetwork(
-            state_size, action_size, fc1_units, fc2_units, learning_rate
+        self.target_model = QNetworkFactory.create_model(
+            ModelType.STANDARD,
+            state_size,
+            action_size,
+            fc1_units,
+            fc2_units,
+            learning_rate,
         )
+        self.target_model.set_weights(self.online_model.get_weights())
 
     def train(self, episode):
         data = self.buffer_helper.sample_batch(self.batch_size)
@@ -582,12 +624,23 @@ class DuelingDQNAgent(DoubleDQNAgent):
     def _define_model(
         self, state_size, action_size, fc1_units, fc2_units, learning_rate
     ):
-        self.online_model = DuelingQNetwork(
-            state_size, action_size, fc1_units, fc2_units, learning_rate
+        self.online_model = QNetworkFactory.create_model(
+            ModelType.DUELING,
+            state_size,
+            action_size,
+            fc1_units,
+            fc2_units,
+            learning_rate,
         )
-        self.target_model = DuelingQNetwork(
-            state_size, action_size, fc1_units, fc2_units, learning_rate
+        self.target_model = QNetworkFactory.create_model(
+            ModelType.DUELING,
+            state_size,
+            action_size,
+            fc1_units,
+            fc2_units,
+            learning_rate,
         )
+        self.target_model.set_weights(self.online_model.get_weights())
 
     def train(self, episode):
         self.episode_count += 1
