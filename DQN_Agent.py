@@ -379,6 +379,10 @@ class IAgent(ABC):
     def store_experience(self, state, next_state, reward, action, done, huristic):
         pass
 
+    @abstractmethod
+    def get_epsilon(self):
+        pass
+
 
 class AgentFactory:
     @staticmethod
@@ -566,6 +570,9 @@ class DQNAgent(IAgent):
         self.buffer_helper.store_experience(
             state, next_state, reward, action, done, huristic
         )
+
+    def get_epsilon(self):
+        return self.epsilon
 
 
 class DoubleDQNAgent(DQNAgent):
