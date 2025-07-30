@@ -7,6 +7,7 @@ import random
 from tensorflow.keras.layers import Dense, Input
 from collections import deque
 from enum import Enum
+from abc import ABC, abstractclassmethod, abstractmethod
 
 
 class EpsilonPolicyType(Enum):
@@ -51,7 +52,9 @@ class ExperienceBuffer:
             current_state, imm_reward, heuristic, self.prefer_lower_heuristic
         )
         if self.use_normalization:
-            imm_reward = self.__normalize_reward(self.reward_range, imm_reward)
+            imm_reward = self.reward_helper.normalize_reward(
+                self.reward_range, imm_reward
+            )
         self.memory_buffer.append(
             {
                 "current_state": current_state,
@@ -75,47 +78,76 @@ class ExperienceBuffer:
         heuristics = np.array([item["heuristic"] for item in batch])
         return states, next_states, rewards, actions, dones, heuristics
 
-    # be carefull with nomalization
-    # and reward_range , it may keep you loss close to zero , while your model is learning nothing
-    # in short , cast Qt = r + gamma*Q  , with smaller r , you will have smaller change , and since Q already predicted by model it self,
-    # its like model fit on it own material , so , you will see small loss , with not progress
-    def __normalize_reward(self, reward_range, reward):
-        min_r, max_r = reward_range
-        if max_r == min_r:
-            return 0.0
-        norm = (reward - min_r) / (max_r - min_r)
-        return norm * 2 - 1
+
+class AbstractQNetwork(ABC):
+    @abstractmethod
+    @abstractmethod
+    def predict(self, states: np.ndarray, verbose: int = 0) -> np.ndarray:
+        pass
+
+    @abstractmethod
+    def fit(
+        self,
+        states: np.ndarray,
+        q_targets: np.ndarray,
+        epochs: int = 1,
+        verbose: int = 0,
+    ) -> float:
+        pass
+
+    @abstractmethod
+    def set_weights(self, weights: list) -> bool:
+        pass
+
+    @abstractmethod
+    def get_weights(self) -> list:
+        pass
 
 
-class QNetwork:
-    def __init__(self, state_size, action_size, learning_rate=0.001) -> None:
+class QNetwork(AbstractQNetwork):
+    def __init__(
+        self,
+        state_size,
+        action_size,
+        fc1_units: int = 64,
+        fc2_units: int = 64,
+        learning_rate=0.001,
+    ) -> None:
         self.state_size = state_size
         self.action_size = action_size
         self._model = self._initiate_model()
         self._model.compile(loss="mse", optimizer=Adam(learning_rate=learning_rate))
+        self.fc1_units = fc1_units
+        self.fc2_units = fc2_units
 
     def _initiate_model(self):
         return keras.Sequential(
             [
                 Input(shape=(self.state_size,)),
-                Dense(units=64, activation="relu"),
-                Dense(units=32, activation="relu"),
+                Dense(units=self.fc1_units, activation="relu"),
+                Dense(units=self.fc2_units, activation="relu"),
                 Dense(units=self.action_size, activation="linear"),
             ]
         )
 
-    def predict(self, states, verbose=0):
+    def predict(self, states: np.ndarray, verbose: int = 0) -> np.ndarray:
         return self._model.predict(states, verbose=verbose)
 
-    def fit(self, states, q_targets, epochs=1, verbose=0):
+    def fit(
+        self,
+        states: np.ndarray,
+        q_targets: np.ndarray,
+        epochs: int = 1,
+        verbose: int = 0,
+    ) -> float:
         history = self._model.fit(states, q_targets, epochs=epochs, verbose=verbose)
         return history.history["loss"][0]
 
-    def set_weights(self, weights):
+    def set_weights(self, weights: list) -> bool:
         self._model.set_weights(weights)
         return True
 
-    def get_weights(self):
+    def get_weights(self) -> list:
         return self._model.get_weights()
 
 
@@ -124,15 +156,27 @@ class QNetwork:
 # splits into two streams near the end: one for the state-value (V) and one for the advantage (A).
 # These are then combined using the formula:
 # Q(s, a) = V(s) + (A(s, a) - mean(A(s, a')))
-class DuelingQNetwork(QNetwork):
-    def __init__(self, state_size, action_size, learning_rate=0.001) -> None:
-        super().__init__(state_size, action_size, learning_rate)
+class DuelingQNetwork(AbstractQNetwork):
+    def __init__(
+        self,
+        state_size: int,
+        action_size: int,
+        fc1_units: int = 64,
+        fc2_units: int = 64,
+        learning_rate: float = 0.001,
+    ) -> None:
+        self.state_size = state_size
+        self.action_size = action_size
+        self._model = self._initiate_model()
+        self._model.compile(loss="mse", optimizer=Adam(learning_rate=learning_rate))
+        self.fc1_units = fc1_units
+        self.fc2_units = fc2_units
 
     def _initiate_model(self):
         print(self.action_size)
         inputs = keras.Input(shape=(self.state_size,))
-        x = keras.layers.Dense(64, activation="relu")(inputs)
-        x = keras.layers.Dense(64, activation="relu")(x)
+        x = keras.layers.Dense(self.fc1_units, activation="relu")(inputs)
+        x = keras.layers.Dense(self.fc2_units, activation="relu")(x)
         value = keras.layers.Dense(1, activation=None)(x)
         advantages = keras.layers.Dense(self.action_size, activation=None)(x)
         # combine: Q(s, a) = V(s) + (A(s, a) - mean(A(s, a')))
@@ -142,6 +186,26 @@ class DuelingQNetwork(QNetwork):
         )(advantages)
         q_values = keras.layers.Add()([value, mean_advantages])
         return keras.Model(inputs=inputs, outputs=q_values)
+
+    def predict(self, states: np.ndarray, verbose: int = 0) -> np.ndarray:
+        return self._model.predict(states, verbose=verbose)
+
+    def fit(
+        self,
+        states: np.ndarray,
+        q_targets: np.ndarray,
+        epochs: int = 1,
+        verbose: int = 0,
+    ) -> float:
+        history = self._model.fit(states, q_targets, epochs=epochs, verbose=verbose)
+        return history.history["loss"][0]
+
+    def set_weights(self, weights: list) -> bool:
+        self._model.set_weights(weights)
+        return True
+
+    def get_weights(self) -> list:
+        return self._model.get_weights()
 
 
 # we learnd that agent should balance between exploration and exploitation
@@ -251,6 +315,17 @@ class RewardHelper:
             new_reward += self.progress_bonus
         return new_reward
 
+    # be carefull with nomalization
+    # and reward_range , it may keep you loss close to zero , while your model is learning nothing
+    # in short , cast Qt = r + gamma*Q  , with smaller r , you will have smaller change , and since Q already predicted by model it self,
+    # its like model fit on it own material , so , you will see small loss , with not progress
+    def normalize_reward(self, reward_range, reward):
+        min_r, max_r = reward_range
+        if max_r == min_r:
+            return 0.0
+        norm = (reward - min_r) / (max_r - min_r)
+        return norm * 2 - 1
+
 
 class DQNAgent:
     def __init__(
@@ -272,6 +347,8 @@ class DQNAgent:
         exploration_bonus: float = 0.1,
         reward_range=(0, 0),
         use_normalization=False,
+        fc1_units: int = 64,
+        fc2_units: int = 64,
     ) -> None:
         self.action_size = action_size
         self.state_size = state_size
@@ -294,10 +371,14 @@ class DQNAgent:
             reward_range=reward_range,
             use_normalization=use_normalization,
         )
-        self._define_model(state_size, action_size, learning_rate)
+        self._define_model(state_size, action_size, fc1_units, fc2_units, learning_rate)
 
-    def _define_model(self, state_size, action_size, learning_rate):
-        self.model = QNetwork(state_size, action_size, learning_rate)
+    def _define_model(
+        self, state_size, action_size, fc1_units, fc2_units, learning_rate
+    ):
+        self.model = QNetwork(
+            state_size, action_size, fc1_units, fc2_units, learning_rate
+        )
 
     def train(self, episode):
         data = self.buffer_helper.sample_batch(self.batch_size)
@@ -354,6 +435,8 @@ class DoubleDQNAgent(DQNAgent):
         target_update_frequency=10,
         reward_range=(0, 0),
         use_normalization=False,
+        fc1_units: int = 64,
+        fc2_units: int = 64,
     ) -> None:
         super().__init__(
             action_size,
@@ -377,15 +460,21 @@ class DoubleDQNAgent(DQNAgent):
         self.update_target_network_method = update_target_network_method
         self.online_model = self.model
         self.target_model = None
-        self._define_model(state_size, action_size, learning_rate)
+        self._define_model(state_size, action_size, fc1_units, fc2_units, learning_rate)
         self.previous_episode = 0
         self.update_factor = update_factor
         self.target_model.set_weights(self.online_model.get_weights())
         self.target_update_frequency = target_update_frequency
 
-    def _define_model(self, state_size, action_size, learning_rate):
-        self.online_model = QNetwork(state_size, action_size, learning_rate)
-        self.target_model = QNetwork(state_size, action_size, learning_rate)
+    def _define_model(
+        self, state_size, action_size, fc1_units, fc2_units, learning_rate
+    ):
+        self.online_model = QNetwork(
+            state_size, action_size, fc1_units, fc2_units, learning_rate
+        )
+        self.target_model = QNetwork(
+            state_size, action_size, fc1_units, fc2_units, learning_rate
+        )
 
     def train(self, episode):
         data = self.buffer_helper.sample_batch(self.batch_size)
@@ -464,6 +553,8 @@ class DuelingDQNAgent(DoubleDQNAgent):
         target_update_frequency=10,
         reward_range=(0, 0),
         use_normalization=False,
+        fc1_units: int = 64,
+        fc2_units: int = 64,
     ) -> None:
         super().__init__(
             action_size,
@@ -488,9 +579,15 @@ class DuelingDQNAgent(DoubleDQNAgent):
             use_normalization,
         )
 
-    def _define_model(self, state_size, action_size, learning_rate):
-        self.online_model = DuelingQNetwork(state_size, action_size, learning_rate)
-        self.target_model = DuelingQNetwork(state_size, action_size, learning_rate)
+    def _define_model(
+        self, state_size, action_size, fc1_units, fc2_units, learning_rate
+    ):
+        self.online_model = DuelingQNetwork(
+            state_size, action_size, fc1_units, fc2_units, learning_rate
+        )
+        self.target_model = DuelingQNetwork(
+            state_size, action_size, fc1_units, fc2_units, learning_rate
+        )
 
     def train(self, episode):
         self.episode_count += 1
