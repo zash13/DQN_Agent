@@ -148,16 +148,16 @@ class QNetwork(AbstractQNetwork):
         self,
         state_size,
         action_size,
-        fc1_units: int = 64,
-        fc2_units: int = 64,
+        fc1_units: int,
+        fc2_units: int,
         learning_rate=0.001,
     ) -> None:
         self.state_size = state_size
         self.action_size = action_size
-        self._model = self._initiate_model()
-        self._model.compile(loss="mse", optimizer=Adam(learning_rate=learning_rate))
         self.fc1_units = fc1_units
         self.fc2_units = fc2_units
+        self._model = self._initiate_model()
+        self._model.compile(loss="mse", optimizer=Adam(learning_rate=learning_rate))
 
     def _initiate_model(self):
         return keras.Sequential(
@@ -200,19 +200,18 @@ class DuelingQNetwork(AbstractQNetwork):
         self,
         state_size: int,
         action_size: int,
-        fc1_units: int = 64,
-        fc2_units: int = 64,
+        fc1_units: int,
+        fc2_units: int,
         learning_rate: float = 0.001,
     ) -> None:
         self.state_size = state_size
         self.action_size = action_size
-        self._model = self._initiate_model()
-        self._model.compile(loss="mse", optimizer=Adam(learning_rate=learning_rate))
         self.fc1_units = fc1_units
         self.fc2_units = fc2_units
+        self._model = self._initiate_model()
+        self._model.compile(loss="mse", optimizer=Adam(learning_rate=learning_rate))
 
     def _initiate_model(self):
-        print(self.action_size)
         inputs = keras.Input(shape=(self.state_size,))
         x = keras.layers.Dense(self.fc1_units, activation="relu")(inputs)
         x = keras.layers.Dense(self.fc2_units, activation="relu")(x)
