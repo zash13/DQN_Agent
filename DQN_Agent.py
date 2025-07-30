@@ -7,7 +7,8 @@ import random
 from tensorflow.keras.layers import Dense, Input
 from collections import deque
 from enum import Enum
-from abc import ABC, abstractclassmethod, abstractmethod
+from abc import ABC, abstractmethod
+from typing import Optional
 
 
 class EpsilonPolicyType(Enum):
@@ -29,6 +30,12 @@ class UpdateTargetNetworkType(Enum):
 class ModelType(Enum):
     STANDARD = "standard"
     DUELING = "dueling"
+
+
+class AgentType(Enum):
+    DQN = "dqn"
+    DOUBLE_DQN = "double_dqn"
+    DUELING_DQN = "dueling_dqn"
 
 
 INFINITY = float("inf")
@@ -358,30 +365,140 @@ class RewardHelper:
         return norm * 2 - 1
 
 
-class DQNAgent:
+class IAgent(ABC):
+    @abstractmethod
+    def train(self, episode):
+        pass
+
+    @abstractmethod
+    def select_action(self, current_state):
+        pass
+
+
+class AgentFactory:
+    @staticmethod
+    def create_agent(
+        agent_type: AgentType,
+        action_size: int,
+        state_size: int,
+        learning_rate: float = 0.001,
+        buffer_size: int = 2000,
+        batch_size: int = 32,
+        gamma: float = 0.99,
+        max_episodes: int = 200,
+        epsilon: float = 1.0,
+        epsilon_min: float = 0.01,
+        epsilon_decay: float = 0.995,
+        epsilon_policy: Optional[EpsilonPolicy] = None,
+        reward_policy: RewardPolicyType = RewardPolicyType.NONE,
+        prefer_lower_heuristic: bool = True,
+        progress_bonus: float = 0.05,
+        exploration_bonus: float = 0.1,
+        update_target_network_method: UpdateTargetNetworkType = UpdateTargetNetworkType.HARD,
+        update_factor: float = 0.005,
+        target_update_frequency: int = 10,
+        reward_range: tuple = (0, 0),
+        use_normalization: bool = False,
+        fc1_units: int = 64,
+        fc2_units: int = 64,
+    ) -> IAgent:
+        """
+        create an agent instance based on the specified agent type.
+
+        Args:
+            agent_type: Type of agent to create (DQN, DOUBLE_DQN, DUELING_DQN)
+
+        Returns:
+            Interface IAgent.
+
+        """
+        # Common dependencies
+        epsilon_policy = epsilon_policy or EpsilonPolicy(
+            epsilon_min=epsilon_min,
+            epsilon_decay=epsilon_decay,
+            policy=EpsilonPolicyType.DECAY,
+        )
+        reward_helper = RewardHelper(
+            progress_bonus=progress_bonus,
+            exploration_bonus=exploration_bonus,
+            policy=reward_policy,
+        )
+        buffer_helper = ExperienceBuffer(
+            reward_helper,
+            buffer_size=buffer_size,
+            prefer_lower_heuristic=prefer_lower_heuristic,
+            reward_range=reward_range,
+            use_normalization=use_normalization,
+        )
+
+        if agent_type == AgentType.DQN:
+            return DQNAgent(
+                action_size=action_size,
+                state_size=state_size,
+                learning_rate=learning_rate,
+                buffer_helper=buffer_helper,
+                batch_size=batch_size,
+                gamma=gamma,
+                max_episodes=max_episodes,
+                epsilon=epsilon,
+                epsilon_policy=epsilon_policy,
+                fc1_units=fc1_units,
+                fc2_units=fc2_units,
+            )
+        elif agent_type == AgentType.DOUBLE_DQN:
+            return DoubleDQNAgent(
+                action_size=action_size,
+                state_size=state_size,
+                learning_rate=learning_rate,
+                buffer_helper=buffer_helper,
+                batch_size=batch_size,
+                gamma=gamma,
+                max_episodes=max_episodes,
+                epsilon=epsilon,
+                epsilon_policy=epsilon_policy,
+                update_target_network_method=update_target_network_method,
+                update_factor=update_factor,
+                target_update_frequency=target_update_frequency,
+                fc1_units=fc1_units,
+                fc2_units=fc2_units,
+            )
+        elif agent_type == AgentType.DUELING_DQN:
+            return DuelingDQNAgent(
+                action_size=action_size,
+                state_size=state_size,
+                learning_rate=learning_rate,
+                buffer_helper=buffer_helper,
+                batch_size=batch_size,
+                gamma=gamma,
+                max_episodes=max_episodes,
+                epsilon=epsilon,
+                epsilon_policy=epsilon_policy,
+                update_target_network_method=update_target_network_method,
+                update_factor=update_factor,
+                target_update_frequency=target_update_frequency,
+                fc1_units=fc1_units,
+                fc2_units=fc2_units,
+            )
+        else:
+            raise ValueError(f"Unknown agent type: {agent_type}")
+
+
+class DQNAgent(IAgent):
     """single network Deep Q-learning model"""
 
     def __init__(
         self,
-        action_size,
-        state_size,
-        learning_rate=0.001,
-        buffer_size=2000,
-        batch_size=32,
-        gamma=0.99,
-        max_episodes=200,
-        epsilon=1.0,
-        epsilon_min=0.01,
-        epsilon_decay=0.995,
-        epsilon_policy: EpsilonPolicy = None,
-        reward_policy: RewardPolicyType = RewardPolicyType.NONE,
-        prefer_lower_heuristic=True,
-        progress_bonus: float = 0.05,
-        exploration_bonus: float = 0.1,
-        reward_range=(0, 0),
-        use_normalization=False,
-        fc1_units: int = 64,
-        fc2_units: int = 64,
+        action_size: int,
+        state_size: int,
+        learning_rate: float,
+        buffer_helper: ExperienceBuffer,
+        batch_size: int,
+        gamma: float,
+        max_episodes: int,
+        epsilon: float,
+        epsilon_policy: EpsilonPolicy,
+        fc1_units: int,
+        fc2_units: int,
     ) -> None:
         self.action_size = action_size
         self.state_size = state_size
@@ -390,20 +507,9 @@ class DQNAgent:
         self.epsilon = epsilon
         self.episode_count = 0
         self.max_episodes = max_episodes
-
         self.model: "AbstractQNetwork"
-        self.epsilon_policy = epsilon_policy or EpsilonPolicy(
-            epsilon_min=epsilon_min,
-            epsilon_decay=epsilon_decay,
-            policy=EpsilonPolicyType.DECAY,
-        )
-        self.buffer_helper = ExperienceBuffer(
-            RewardHelper(progress_bonus, exploration_bonus, reward_policy),
-            buffer_size=buffer_size,
-            prefer_lower_heuristic=prefer_lower_heuristic,
-            reward_range=reward_range,
-            use_normalization=use_normalization,
-        )
+        self.epsilon_policy = epsilon_policy
+        self.buffer_helper = buffer_helper
         self._define_model(state_size, action_size, fc1_units, fc2_units, learning_rate)
 
     def _define_model(
@@ -455,55 +561,41 @@ class DQNAgent:
 class DoubleDQNAgent(DQNAgent):
     def __init__(
         self,
-        action_size,
-        state_size,
-        learning_rate=0.001,
-        buffer_size=2000,
-        batch_size=32,
-        gamma=0.99,
-        max_episodes=200,
-        epsilon=1.0,
-        epsilon_min=0.01,
-        epsilon_decay=0.995,
-        epsilon_policy: EpsilonPolicy = None,
-        reward_policy: RewardPolicyType = RewardPolicyType.NONE,
-        prefer_lower_heuristic=True,
-        progress_bonus: float = 0.05,
-        exploration_bonus: float = 0.1,
-        update_target_network_method: UpdateTargetNetworkType = UpdateTargetNetworkType.HARD,
-        update_factor=0.005,
-        target_update_frequency=10,
-        reward_range=(0, 0),
-        use_normalization=False,
-        fc1_units: int = 64,
-        fc2_units: int = 64,
+        action_size: int,
+        state_size: int,
+        learning_rate: float,
+        buffer_helper: ExperienceBuffer,
+        batch_size: int,
+        gamma: float,
+        max_episodes: int,
+        epsilon: float,
+        epsilon_policy: EpsilonPolicy,
+        update_target_network_method: UpdateTargetNetworkType,
+        update_factor: float,
+        target_update_frequency: int,
+        fc1_units: int,
+        fc2_units: int,
     ) -> None:
         super().__init__(
-            action_size,
-            state_size,
-            learning_rate,
-            buffer_size,
-            batch_size,
-            gamma,
-            max_episodes,
-            epsilon,
-            epsilon_min,
-            epsilon_decay,
-            epsilon_policy,
-            reward_policy,
-            prefer_lower_heuristic,
-            progress_bonus,
-            exploration_bonus,
-            reward_range,
-            use_normalization,
+            action_size=action_size,
+            state_size=state_size,
+            learning_rate=learning_rate,
+            buffer_helper=buffer_helper,
+            batch_size=batch_size,
+            gamma=gamma,
+            max_episodes=max_episodes,
+            epsilon=epsilon,
+            epsilon_policy=epsilon_policy,
+            fc1_units=fc1_units,
+            fc2_units=fc2_units,
         )
         self.update_target_network_method = update_target_network_method
         self.online_model: "AbstractQNetwork" = self.model
         self.target_model: "AbstractQNetwork"
-        self._define_model(state_size, action_size, fc1_units, fc2_units, learning_rate)
         self.previous_episode = 0
         self.update_factor = update_factor
         self.target_update_frequency = target_update_frequency
+        self._define_model(state_size, action_size, fc1_units, fc2_units, learning_rate)
 
     def _define_model(
         self, state_size, action_size, fc1_units, fc2_units, learning_rate
@@ -585,50 +677,36 @@ class DoubleDQNAgent(DQNAgent):
 class DuelingDQNAgent(DoubleDQNAgent):
     def __init__(
         self,
-        action_size,
-        state_size,
-        learning_rate=0.001,
-        buffer_size=2000,
-        batch_size=32,
-        gamma=0.99,
-        max_episodes=200,
-        epsilon=1.0,
-        epsilon_min=0.01,
-        epsilon_decay=0.995,
-        epsilon_policy: EpsilonPolicy = None,
-        reward_policy: RewardPolicyType = RewardPolicyType.NONE,
-        prefer_lower_heuristic=True,
-        progress_bonus: float = 0.05,
-        exploration_bonus: float = 0.1,
-        update_target_network_method: UpdateTargetNetworkType = UpdateTargetNetworkType.HARD,
-        update_factor=0.005,
-        target_update_frequency=10,
-        reward_range=(0, 0),
-        use_normalization=False,
-        fc1_units: int = 64,
-        fc2_units: int = 64,
+        action_size: int,
+        state_size: int,
+        learning_rate: float,
+        buffer_helper: ExperienceBuffer,
+        batch_size: int,
+        gamma: float,
+        max_episodes: int,
+        epsilon: float,
+        epsilon_policy: EpsilonPolicy,
+        update_target_network_method: UpdateTargetNetworkType,
+        update_factor: float,
+        target_update_frequency: int,
+        fc1_units: int,
+        fc2_units: int,
     ) -> None:
         super().__init__(
-            action_size,
-            state_size,
-            learning_rate,
-            buffer_size,
-            batch_size,
-            gamma,
-            max_episodes,
-            epsilon,
-            epsilon_min,
-            epsilon_decay,
-            epsilon_policy,
-            reward_policy,
-            prefer_lower_heuristic,
-            progress_bonus,
-            exploration_bonus,
-            update_target_network_method,
-            update_factor,
-            target_update_frequency,
-            reward_range,
-            use_normalization,
+            action_size=action_size,
+            state_size=state_size,
+            learning_rate=learning_rate,
+            buffer_helper=buffer_helper,
+            batch_size=batch_size,
+            gamma=gamma,
+            max_episodes=max_episodes,
+            epsilon=epsilon,
+            epsilon_policy=epsilon_policy,
+            update_target_network_method=update_target_network_method,
+            update_factor=update_factor,
+            target_update_frequency=target_update_frequency,
+            fc1_units=fc1_units,
+            fc2_units=fc2_units,
         )
 
     def _define_model(
