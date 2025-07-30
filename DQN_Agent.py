@@ -606,7 +606,7 @@ class DoubleDQNAgent(DQNAgent):
             fc2_units=fc2_units,
         )
         self.update_target_network_method = update_target_network_method
-        self.online_model: "AbstractQNetwork" = self.model
+        self.online_model: "AbstractQNetwork"
         self.target_model: "AbstractQNetwork"
         self.previous_episode = 0
         self.update_factor = update_factor
