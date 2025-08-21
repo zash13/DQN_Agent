@@ -68,23 +68,16 @@ class Logging:
     def info(
         self,
         message: str,
-        show_in_console: bool = False,
         *args,
         **keywords,
     ) -> None:
-        self._log(LogLevel.INFO, message, show_in_console, *args, **keywords)
+        self._log(LogLevel.INFO, message, *args, **keywords)
 
-    def debug(
-        self, message: str, show_in_console: bool = False, *args, **keywords
-    ) -> None:
-        self._log(LogLevel.DEBUG, message, show_in_console, *args, **keywords)
+    def debug(self, message: str, *args, **keywords) -> None:
+        self._log(LogLevel.DEBUG, message, *args, **keywords)
 
-    def warning(
-        self, message: str, show_in_console: bool = False, *args, **keywords
-    ) -> None:
-        self._log(LogLevel.WARNING, message, show_in_console, *args, **keywords)
+    def warning(self, message: str, *args, **keywords) -> None:
+        self._log(LogLevel.WARNING, message, *args, **keywords)
 
-    def error(
-        self, message: str, show_in_console: bool = False, *args, **keywords
-    ) -> None:
-        self._log(LogLevel.ERROR, message, show_in_console, *args, **keywords)
+    def error(self, message: str, *args, **keywords) -> None:
+        self._log(LogLevel.ERROR, message, *args, **keywords)
