@@ -27,16 +27,17 @@ class Logging:
         file_name,
         verbosity: Verbosity = Verbosity.INFO,
         user_name: Optional[str] = "myapp",
+        show_in_console=False,
     ) -> None:
         self.name = user_name
         self.file_name = file_name
         self.verbos = verbosity
+        self.show_in_console = show_in_console
 
     def _log(
         self,
         log_level: LogLevel,
         message: str,
-        show_in_console: bool,
         *args,
         **keywords,
     ):
@@ -47,7 +48,7 @@ class Logging:
         )
 
         self._write_to_file(formatted_message)
-        if show_in_console:
+        if self.show_in_console:
             self._write_to_console(formatted_message)
 
     def _formatting_message(
