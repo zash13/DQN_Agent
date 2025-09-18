@@ -382,6 +382,14 @@ class IAgent(ABC):
     def get_epsilon(self):
         pass
 
+    @abstractmethod
+    def save(self, path: str):
+        pass
+
+    @abstractmethod
+    def load(self, path: str):
+        pass
+
 
 class AgentFactory:
     @staticmethod
@@ -572,6 +580,16 @@ class DQNAgent(IAgent):
 
     def get_epsilon(self):
         return self.epsilon
+
+    def save(self, path: str):
+        """save the keras model to disk"""
+        self.model.save(path)
+        print(f"[INFO] Model saved to {path}")
+
+    def load(self, path: str):
+        """load the keras model from disk"""
+        self.model = keras.models.load_model(path)
+        print(f" model loaded from {path}")
 
 
 class DoubleDQNAgent(DQNAgent):
