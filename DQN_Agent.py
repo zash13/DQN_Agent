@@ -189,6 +189,29 @@ class QNetwork(AbstractQNetwork):
     def get_weights(self) -> list:
         return self._model.get_weights()
 
+    def save(self, path: str) -> None:
+        """
+        save the model to the given path.
+        example: network.save("checkpoints/dqn_model")
+        """
+        self._model.save(path)
+
+    @classmethod
+    def load(cls, path: str) -> "QNetwork":
+        """
+        load a qnetwork from the given path.
+        example: net = qnetwork.load("checkpoints/dqn_model")
+        """
+        model = keras.models.load_model(path)
+        state_size = model.input_shape[-1]
+        action_size = model.output_shape[-1]
+        fc1_units = model.layers[1].units
+        fc2_units = model.layers[2].units
+
+        net = cls(state_size, action_size, fc1_units, fc2_units)
+        net._model = model
+        return net
+
 
 # Dueling Q-Network:
 # The main difference compared to a standard Q-network is that the network
@@ -382,14 +405,6 @@ class IAgent(ABC):
     def get_epsilon(self):
         pass
 
-    @abstractmethod
-    def save(self, path: str):
-        pass
-
-    @abstractmethod
-    def load(self, path: str):
-        pass
-
 
 class AgentFactory:
     @staticmethod
@@ -580,16 +595,6 @@ class DQNAgent(IAgent):
 
     def get_epsilon(self):
         return self.epsilon
-
-    def save(self, path: str):
-        """save the keras model to disk"""
-        self.model.save(path)
-        print(f"[INFO] Model saved to {path}")
-
-    def load(self, path: str):
-        """load the keras model from disk"""
-        self.model = keras.models.load_model(path)
-        print(f" model loaded from {path}")
 
 
 class DoubleDQNAgent(DQNAgent):
