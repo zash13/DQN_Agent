@@ -1,4 +1,3 @@
-import keras
 from keras.optimizers import Adam
 from keras.layers import Dense, Input
 import random
@@ -9,6 +8,7 @@ from typing import Optional
 import os
 import json
 import numpy as np
+from tensorflow import keras
 
 
 class EpsilonPolicyType(Enum):
