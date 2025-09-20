@@ -1,15 +1,14 @@
-from os import stat
-from types import new_class
-from matplotlib.pyplot import cla
-import numpy as np
-from tensorflow import keras
-from tensorflow.keras.optimizers import Adam
+import keras
+from keras.optimizers import Adam
+from keras.layers import Dense, Input
 import random
-from tensorflow.keras.layers import Dense, Input
 from collections import deque
 from enum import Enum
 from abc import ABC, abstractmethod
 from typing import Optional
+import os
+import json
+import numpy as np
 
 
 class EpsilonPolicyType(Enum):
@@ -405,6 +404,14 @@ class IAgent(ABC):
     def get_epsilon(self):
         pass
 
+    @abstractmethod
+    def save(self, path: str):
+        pass
+
+    @abstractmethod
+    def load(self, path: str):
+        pass
+
 
 class AgentFactory:
     @staticmethod
@@ -595,6 +602,20 @@ class DQNAgent(IAgent):
 
     def get_epsilon(self):
         return self.epsilon
+
+    def save(self, path: str):
+        self.model.save(path)
+        with open(path + "_meta.json", "w") as f:
+            json.dump({"epsilon": self.epsilon, "episode_count": self.episode_count}, f)
+
+    def load(self, path: str):
+        self.model = keras.models.load_model(path)
+        meta_path = path + "_meta.json"
+        if os.path.exists(meta_path):
+            with open(meta_path, "r") as f:
+                meta = json.load(f)
+                self.epsilon = meta["epsilon"]
+                self.episode_count = meta["episode_count"]
 
 
 class DoubleDQNAgent(DQNAgent):
