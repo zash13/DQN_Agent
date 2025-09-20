@@ -188,29 +188,6 @@ class QNetwork(AbstractQNetwork):
     def get_weights(self) -> list:
         return self._model.get_weights()
 
-    def save(self, path: str) -> None:
-        """
-        save the model to the given path.
-        example: network.save("checkpoints/dqn_model")
-        """
-        self._model.save(path)
-
-    @classmethod
-    def load(cls, path: str) -> "QNetwork":
-        """
-        load a qnetwork from the given path.
-        example: net = qnetwork.load("checkpoints/dqn_model")
-        """
-        model = keras.models.load_model(path)
-        state_size = model.input_shape[-1]
-        action_size = model.output_shape[-1]
-        fc1_units = model.layers[1].units
-        fc2_units = model.layers[2].units
-
-        net = cls(state_size, action_size, fc1_units, fc2_units)
-        net._model = model
-        return net
-
 
 # Dueling Q-Network:
 # The main difference compared to a standard Q-network is that the network
@@ -732,6 +709,28 @@ class DoubleDQNAgent(DQNAgent):
         else:
             q_value = self.online_model.predict(current_state, verbose=0)[0]
             return np.argmax(q_value)
+
+    def save(self, path: str):
+        """Save both online and target models + metadata."""
+        # save online network
+        self.online_model._model.save(path + "_online" + ".keras")
+        # save target network
+        self.target_model._model.save(path + "_target" + ".keras")
+        # save agent metadata
+        with open(path + "_meta.json", "w") as f:
+            json.dump({"epsilon": self.epsilon, "episode_count": self.episode_count}, f)
+
+    def load(self, path: str):
+        """Load both online and target models + metadata."""
+        self.online_model._model = keras.models.load_model(path + "_online" + ".keras")
+        self.target_model._model = keras.models.load_model(path + "_target" + ".keras")
+
+        meta_path = path + "_meta.json"
+        if os.path.exists(meta_path):
+            with open(meta_path, "r") as f:
+                meta = json.load(f)
+                self.epsilon = meta.get("epsilon", 1.0)
+                self.episode_count = meta.get("episode_count", 0)
 
 
 class DuelingDQNAgent(DoubleDQNAgent):
