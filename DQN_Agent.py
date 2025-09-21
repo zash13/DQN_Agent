@@ -9,6 +9,7 @@ import os
 import json
 import numpy as np
 from tensorflow import keras
+import tensorflow as tf
 
 
 class EpsilonPolicyType(Enum):
@@ -218,8 +219,7 @@ class DuelingQNetwork(AbstractQNetwork):
         advantages = keras.layers.Dense(self.action_size, activation=None)(x)
         # combine: Q(s, a) = V(s) + (A(s, a) - mean(A(s, a')))
         mean_advantages = keras.layers.Lambda(
-            lambda a: a - keras.backend.mean(a, axis=1, keepdims=True),
-            output_shape=(int(self.action_size),),
+            subtract_mean_advantage, output_shape=(self.action_size,)
         )(advantages)
         q_values = keras.layers.Add()([value, mean_advantages])
         return keras.Model(inputs=inputs, outputs=q_values)
@@ -595,6 +595,13 @@ class DQNAgent(IAgent):
                 self.episode_count = meta["episode_count"]
 
 
+# this part related to lambeda in the model , case without this , saving lambeda is useless and you cannot load it in future , this is what happen for me
+# read this : https://stackoverflow.com/questions/63258902/cannot-load-saved-keras-model-due-to-use-of-lambda?utm_source=chatgpt.com
+# it cast me only 2 days
+def subtract_mean_advantage(x):
+    return x - tf.reduce_mean(x, axis=1, keepdims=True)
+
+
 class DoubleDQNAgent(DQNAgent):
     def __init__(
         self,
@@ -712,25 +719,56 @@ class DoubleDQNAgent(DQNAgent):
 
     def save(self, path: str):
         """Save both online and target models + metadata."""
-        # save online network
-        self.online_model._model.save(path + "_online" + ".keras")
-        # save target network
-        self.target_model._model.save(path + "_target" + ".keras")
-        # save agent metadata
+        online_path = path + "_online.keras"
+        target_path = path + "_target.keras"
+
+        os.makedirs(os.path.dirname(path), exist_ok=True) if os.path.dirname(
+            path
+        ) else None
+
+        try:
+            self.online_model._model.save(online_path)
+            self.target_model._model.save(target_path)
+        except Exception as e:
+            print("[WARN] model.save failed", e)
+
+        meta = {
+            "epsilon": self.epsilon,
+            "episode_count": getattr(self, "episode_count", 0),
+        }
         with open(path + "_meta.json", "w") as f:
-            json.dump({"epsilon": self.epsilon, "episode_count": self.episode_count}, f)
+            json.dump(meta, f)
+        print(f"[INFO] Saved agent to {path} (online/target/meta).")
 
     def load(self, path: str):
-        """Load both online and target models + metadata."""
-        self.online_model._model = keras.models.load_model(path + "_online" + ".keras")
-        self.target_model._model = keras.models.load_model(path + "_target" + ".keras")
+        """Load both online and target models + metadata.
 
+        This function attempts a safe load first. If that fails (lambda/unsafe), it falls back
+        to enabling unsafe deserialization and using custom_objects including the named function.
+        """
+        online_path = path + "_online.keras"
+        target_path = path + "_target.keras"
         meta_path = path + "_meta.json"
+
+        custom_objects = {"subtract_mean_advantage": subtract_mean_advantage}
+
+        self.online_model._model = keras.models.load_model(
+            online_path, safe_mode=False, custom_objects=custom_objects, compile=False
+        )
+        self.target_model._model = keras.models.load_model(
+            target_path, safe_mode=False, custom_objects=custom_objects, compile=False
+        )
+
         if os.path.exists(meta_path):
             with open(meta_path, "r") as f:
                 meta = json.load(f)
                 self.epsilon = meta.get("epsilon", 1.0)
                 self.episode_count = meta.get("episode_count", 0)
+
+        print(
+            f"[INFO] Loaded agent from {path}. "
+            f"Epsilon={self.epsilon}, Episode={self.episode_count}"
+        )
 
 
 class DuelingDQNAgent(DoubleDQNAgent):
