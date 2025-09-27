@@ -31,3 +31,23 @@
   - Check commit messages for a timeline of development, experiments, and agent evolution in that repository .
 
   - Later refactored into a standalone submodule named `DQN_Agent`.
+
+### Call for Collaboration
+
+- i am actively seeking contributions from other programmers to improve the DQN agent . Specific areas where we need help include:
+
+  1. Reward Policies: Designing more effective reward structures to improve the agent's learning efficiency and performance.
+
+  2. Epsilon Decay Strategy: Optimizing the epsilon-greedy exploration strategy to balance exploration and exploitation more effectively.
+
+  3. Chain Inheritance in DQN: Implementing or improving chain inheritance mechanisms to make the DQN architecture more modular and extensible.
+
+New Ideas: We are open to innovative approaches, such as novel network architectures, advanced exploration techniques, or integration with other reinforcement learning methods.
+
+If you're interested in contributing, please feel free to:
+
+- Fork the repository and submit pull requests with your improvements.
+- Share your ideas or suggestions via issues or discussions in the DQN Maze repository.
+- Collaborate on refactoring, testing, or adding new features to the DQN_Agent module.
+
+Let's work together to build a more powerful and versatile DQN agent! Join us in this exciting journey of reinforcement learning exploration.
